@@ -1,6 +1,8 @@
 import json
 import os
 import tkinter as tk
+import os
+from datetime import datetime
 from tkinter import simpledialog
 from datetime import datetime
 
@@ -79,6 +81,10 @@ def ask_name():
 #         self.data["variables"] = game.variables
 #         self.data["history"] = game.history
 #         self._write()
+
+# os.makedirs("saves", exist_ok=True)
+# timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+# path = f"saves/game_{timestamp}.json"
 
 # Tkinter
 root = tk.Tk()

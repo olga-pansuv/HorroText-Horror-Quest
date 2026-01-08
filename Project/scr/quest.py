@@ -5,103 +5,101 @@ from tkinter import simpledialog
 from datetime import datetime
 
 
-# =======================
-# МОДЕЛЬ СЮЖЕТА
-# =======================
+# ==================================================
+# МОДЕЛИ СЮЖЕТА
+# ==================================================
 
-class ChoiceNode:
-    def __init__(self, node_id, text, next_a=None, next_b=None):
+class Choice:
+    def __init__(self, text, next_id):
+        self.text = text
+        self.next = next_id
+
+
+class StoryNode:
+    def __init__(self, node_id, text, choices, node_type="choice", input_key=None):
         self.id = node_id
         self.text = text
-        self.next = {
-            "A": next_a,
-            "B": next_b
-        }
+        self.choices = choices
+        self.type = node_type
+        self.input_key = input_key
+
+    def is_end(self):
+        return len(self.choices) == 0
 
 
-# =======================
-# ЗАГРУЗКА СЮЖЕТА
-# =======================
-
-def load_story_from_json(path):
+def load_story(path):
     with open(path, "r", encoding="utf-8") as f:
         raw = json.load(f)
 
     nodes = {}
     for node_id, data in raw.items():
-        nodes[node_id] = ChoiceNode(
+        nodes[node_id] = StoryNode(
             node_id=node_id,
             text=data["text"],
-            next_a=data.get("A"),
-            next_b=data.get("B")
+            choices=[
+                Choice(c["text"], c["next"])
+                for c in data.get("choices", [])
+            ],
+            node_type=data.get("type", "choice"),
+            input_key=data.get("input_key")
         )
     return nodes
 
 
-# =======================
+# ==================================================
 # СОСТОЯНИЕ ИГРЫ
-# =======================
+# ==================================================
 
 class GameState:
     def __init__(self, nodes, start_id):
         self.nodes = nodes
         self.start_id = start_id
+        self.variables = {}
         self.reset()
 
     def reset(self):
-        """Состояние ДО первого выбора"""
         self.current = self.nodes[self.start_id]
         self.history = []
 
-    def make_choice(self, choice):
-        self.history.append((self.current.id, choice))
-        next_id = self.current.next.get(choice)
-        self.current = self.nodes.get(next_id)
-
-    def is_finished(self):
-        return self.current is None
+    def make_choice(self, choice_index):
+        choice = self.current.choices[choice_index]
+        self.history.append((self.current.id, choice_index))
+        self.current = self.nodes[choice.next]
 
     def restore_from_history(self, history):
-        """Восстановление состояния по истории"""
         self.reset()
-        for node_id, choice in history:
-            if self.current is None:
-                break
-            if self.current.id != node_id:
-                break
-            self.make_choice(choice)
+        for node_id, choice_index in history:
+            self.current = self.nodes[node_id]
+            self.make_choice(choice_index)
 
     def rollback_to(self, index):
-        """
-        index == 0 → начало игры (до первого выбора)
-        index > 0  → соответствующий шаг истории
-        """
-        if index == 0:
-            self.reset()
-        else:
-            new_history = self.history[:index]
-            self.restore_from_history(new_history)
+        self.restore_from_history(self.history[:index])
+
+    def is_finished(self):
+        return self.current.is_end()
 
 
-# =======================
+# ==================================================
 # СОХРАНЕНИЕ
-# =======================
+# ==================================================
 
 class SaveManager:
     def __init__(self, player_name):
-        self.player_name = player_name
-        self.save_dir = "saves"
-        os.makedirs(self.save_dir, exist_ok=True)
-        self.path = os.path.join(self.save_dir, f"{player_name}.json")
+        os.makedirs("saves", exist_ok=True)
+        self.path = f"saves/{player_name}.json"
 
-    def save(self, history):
-        data = {
-            "player": self.player_name,
-            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "history": history
-        }
+    def save(self, game):
         with open(self.path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+            json.dump(
+                {
+                    "variables": game.variables,
+                    "history": game.history,
+                    "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                },
+                f,
+                ensure_ascii=False,
+                indent=2
+            )
 
     def load(self):
         if not os.path.exists(self.path):
@@ -110,106 +108,148 @@ class SaveManager:
             return json.load(f)
 
 
-# =======================
+# ==================================================
 # GUI
-# =======================
+# ==================================================
 
 class QuestApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Текстовый квест")
 
-        # --- игрок ---
+        self.story = load_story("story.json")
+
         self.player_name = simpledialog.askstring(
-            "Имя игрока", "Введите ваше имя:"
+            "Игрок", "Введите имя для сохранения:"
         ) or "Player"
 
-        # --- данные ---
-        self.story = load_story_from_json("story.json")
         self.game = GameState(self.story, "start")
         self.save_manager = SaveManager(self.player_name)
 
-        save_data = self.save_manager.load()
-        if save_data:
-            self.game.restore_from_history(save_data["history"])
+        save = self.save_manager.load()
+        if save:
+            self.game.variables = save.get("variables", {})
+            self.game.restore_from_history(save.get("history", []))
 
-        # --- layout ---
-        main = tk.Frame(root)
-        main.pack(fill="both", expand=True)
+        self.build_ui()
+        self.update_ui()
 
-        left = tk.Frame(main)
-        left.pack(side="left", fill="both", expand=True, padx=10)
+    # ---------------- UI ----------------
 
-        right = tk.Frame(main, width=220)
-        right.pack(side="right", fill="y", padx=10)
+    def build_ui(self):
+        self.main = tk.Frame(self.root)
+        self.main.pack(fill="both", expand=True)
 
-        # --- текст ---
+        self.left = tk.Frame(self.main)
+        self.left.pack(side="left", fill="both", expand=True, padx=10)
+
+        self.right = tk.Frame(self.main, width=260)
+
         self.text_label = tk.Label(
-            left,
-            wraplength=450,
+            self.left,
+            wraplength=520,
             justify="left",
             font=("Arial", 12)
         )
         self.text_label.pack(pady=10)
 
-        self.button_a = tk.Button(
-            left, text="A", width=20,
-            command=lambda: self.choose("A")
-        )
-        self.button_b = tk.Button(
-            left, text="B", width=20,
-            command=lambda: self.choose("B")
-        )
-        self.button_a.pack(pady=5)
-        self.button_b.pack(pady=5)
+        self.input_frame = tk.Frame(self.left)
+        self.input_entry = tk.Entry(self.input_frame, font=("Arial", 12))
+        self.input_entry.pack()
 
-        # --- история ---
-        tk.Label(right, text="История решений").pack()
-        self.history_list = tk.Listbox(right)
+        self.choices_frame = tk.Frame(self.left)
+        self.choices_frame.pack(pady=10)
+
+        tk.Label(self.right, text="История решений").pack()
+        self.history_list = tk.Listbox(self.right)
         self.history_list.pack(fill="y", expand=True)
         self.history_list.bind("<<ListboxSelect>>", self.on_history_select)
 
+    # ---------------- LOGIC ----------------
+
+    def update_ui(self):
+        node = self.game.current
+
+        # Текст с подстановкой переменных
+        try:
+            text = node.text.format(**self.game.variables)
+        except KeyError:
+            text = node.text
+
+        self.text_label.config(text=text)
+
+        # Очистка
+        for w in self.choices_frame.winfo_children():
+            w.destroy()
+        self.input_frame.pack_forget()
+
+        # Input-узел
+        if node.type == "input":
+            self.input_frame.pack(pady=10)
+            self.input_entry.delete(0, tk.END)
+
+        # Кнопки
+        for i, choice in enumerate(node.choices):
+            btn = tk.Button(
+                self.choices_frame,
+                text=choice.text,
+                command=lambda i=i: self.on_choice(i)
+            )
+            btn.pack(fill="x", pady=4)
+
+        # История только в концовке
+        if self.game.is_finished():
+            self.show_history()
+        else:
+            self.hide_history()
+
+    def on_choice(self, index):
+        node = self.game.current
+
+        if node.type == "input" and node.input_key:
+            value = self.input_entry.get().strip()
+            if value:
+                self.game.variables[node.input_key] = value
+
+        self.game.make_choice(index)
+        self.save_manager.save(self.game)
         self.update_ui()
 
-    def choose(self, choice):
-        self.game.make_choice(choice)
-        self.save_manager.save(self.game.history)
-        self.update_ui()
+    # ---------------- HISTORY ----------------
+
+    def show_history(self):
+        if not self.right.winfo_ismapped():
+            self.right.pack(side="right", fill="y", padx=10)
+
+        self.history_list.delete(0, tk.END)
+        self.history_list.insert(tk.END, "0: Начало")
+
+        for i, (node_id, choice_index) in enumerate(self.game.history, 1):
+            node = self.story[node_id]
+            choice = node.choices[choice_index]
+            self.history_list.insert(
+                tk.END, f"{i}: {choice.text}"
+            )
+
+    def hide_history(self):
+        if self.right.winfo_ismapped():
+            self.right.pack_forget()
 
     def on_history_select(self, event):
         if not self.history_list.curselection():
             return
         index = self.history_list.curselection()[0]
         self.game.rollback_to(index)
-        self.save_manager.save(self.game.history)
+        self.save_manager.save(self.game)
         self.update_ui()
 
-    def update_ui(self):
-        # текст и кнопки
-        if self.game.is_finished():
-            self.text_label.config(text="Конец истории.")
-            self.button_a.config(state="disabled")
-            self.button_b.config(state="disabled")
-        else:
-            self.text_label.config(text=self.game.current.text)
-            self.button_a.config(state="normal")
-            self.button_b.config(state="normal")
 
-        # история
-        self.history_list.delete(0, tk.END)
-        self.history_list.insert(tk.END, "0: [Начало игры]")
-        for i, (node, choice) in enumerate(self.game.history, start=1):
-            self.history_list.insert(
-                tk.END, f"{i}: {node} → {choice}"
-            )
-
-
-# =======================
+# ==================================================
 # ЗАПУСК
-# =======================
+# ==================================================
 
 if __name__ == "__main__":
     root = tk.Tk()
-    root.geometry("820x420")
+    root.geometry("920x520")
     QuestApp(root)
     root.mainloop()

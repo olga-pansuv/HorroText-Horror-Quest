@@ -1,7 +1,6 @@
 import json
 import os
 import tkinter as tk
-from tkinter import simpledialog
 from datetime import datetime
 
 
@@ -84,28 +83,33 @@ class GameState:
 # ==================================================
 
 class SaveManager:
-    def __init__(self, player_name):
+    def __init__(self):
         os.makedirs("saves", exist_ok=True)
-        self.path = f"saves/{player_name}.json"
 
-    def save(self, game):
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        self.path = f"saves/game_{timestamp}.json"
+
+        self.data = {
+            "player_name": "__UNKNOWN__",
+            "variables": {},
+            "history": [],
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+        self._write()
+
+    def _write(self):
         with open(self.path, "w", encoding="utf-8") as f:
-            json.dump(
-                {
-                    "variables": game.variables,
-                    "history": game.history,
-                    "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                },
-                f,
-                ensure_ascii=False,
-                indent=2
-            )
+            json.dump(self.data, f, ensure_ascii=False, indent=2)
 
-    def load(self):
-        if not os.path.exists(self.path):
-            return None
-        with open(self.path, "r", encoding="utf-8") as f:
-            return json.load(f)
+    def update_player_name(self, name):
+        self.data["player_name"] = name
+        self._write()
+
+    def save_game(self, game):
+        self.data["variables"] = game.variables
+        self.data["history"] = game.history
+        self._write()
 
 
 # ==================================================
@@ -119,17 +123,8 @@ class QuestApp:
 
         self.story = load_story("story.json")
 
-        self.player_name = simpledialog.askstring(
-            "Игрок", "Введите имя для сохранения:"
-        ) or "Player"
-
         self.game = GameState(self.story, "start")
-        self.save_manager = SaveManager(self.player_name)
-
-        save = self.save_manager.load()
-        if save:
-            self.game.variables = save.get("variables", {})
-            self.game.restore_from_history(save.get("history", []))
+        self.save_manager = SaveManager()
 
         self.build_ui()
         self.update_ui()
@@ -170,7 +165,6 @@ class QuestApp:
     def update_ui(self):
         node = self.game.current
 
-        # Текст с подстановкой переменных
         try:
             text = node.text.format(**self.game.variables)
         except KeyError:
@@ -178,17 +172,14 @@ class QuestApp:
 
         self.text_label.config(text=text)
 
-        # Очистка
         for w in self.choices_frame.winfo_children():
             w.destroy()
         self.input_frame.pack_forget()
 
-        # Input-узел
         if node.type == "input":
             self.input_frame.pack(pady=10)
             self.input_entry.delete(0, tk.END)
 
-        # Кнопки
         for i, choice in enumerate(node.choices):
             btn = tk.Button(
                 self.choices_frame,
@@ -197,7 +188,6 @@ class QuestApp:
             )
             btn.pack(fill="x", pady=4)
 
-        # История только в концовке
         if self.game.is_finished():
             self.show_history()
         else:
@@ -210,9 +200,11 @@ class QuestApp:
             value = self.input_entry.get().strip()
             if value:
                 self.game.variables[node.input_key] = value
+                if node.input_key == "player_name":
+                    self.save_manager.update_player_name(value)
 
         self.game.make_choice(index)
-        self.save_manager.save(self.game)
+        self.save_manager.save_game(self.game)
         self.update_ui()
 
     # ---------------- HISTORY ----------------
@@ -240,7 +232,7 @@ class QuestApp:
             return
         index = self.history_list.curselection()[0]
         self.game.rollback_to(index)
-        self.save_manager.save(self.game)
+        self.save_manager.save_game(self.game)
         self.update_ui()
 
 

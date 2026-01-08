@@ -1,6 +1,8 @@
 import json
+import os
 import tkinter as tk
 from tkinter import simpledialog
+from datetime import datetime
 
 # загрузка json
 with open("story.json", "r", encoding="utf-8") as f:
@@ -45,6 +47,38 @@ def ask_name():
     )
     if not player_name:
         player_name = "Player 1"
+
+# Сохранения
+
+
+# class SaveManager:
+#     def __init__(self):
+#         os.makedirs("saves", exist_ok=True)
+#
+#         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+#         self.path = f"saves/game_{timestamp}.json"
+#
+#         self.data = {
+#             "player_name": "__UNKNOWN__",
+#             "variables": {},
+#             "history": [],
+#             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+#         }
+#
+#         self._write()
+#
+#     def _write(self):
+#         with open(self.path, "w", encoding="utf-8") as f:
+#             json.dump(self.data, f, ensure_ascii=False, indent=2)
+#
+#     def update_player_name(self, name):
+#         self.data["player_name"] = name
+#         self._write()
+#
+#     def save_game(self, game):
+#         self.data["variables"] = game.variables
+#         self.data["history"] = game.history
+#         self._write()
 
 # Tkinter
 root = tk.Tk()

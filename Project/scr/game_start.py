@@ -1,106 +1,131 @@
 import json
-import os
 import tkinter as tk
-import os
-from datetime import datetime
 from tkinter import simpledialog
-from datetime import datetime
 
-# загрузка json
 with open("story.json", "r", encoding="utf-8") as f:
     story = json.load(f)
 
-current_scene = "start"
-player_name = ""
+class Quest:
+    def __init__(self, root):
+        self.root = root
+        self.story = story
+        self.current_scene = "start"
+        self.player_name = ""
+        self.state = {
+            "refused_journalist": False,
+            "close_seat_v1": False,
+            "fire_alarm_cross2": False,
+            "wait_stay_cross": False,
+        }
+        self.text_box = tk.Text(root, wrap="word", font=("Montserrat", 14))
+        self.text_box.pack(expand=True, fill="both", padx=10, pady=10)
+        self.text_box.config(state="disabled")
+        self.buttons_frame = tk.Frame(root)
+        self.buttons_frame.pack(fill="x", padx=10, pady=10)
 
-def show_scene(scene_id):
-    global current_scene
-    current_scene = scene_id
-    scene = story[scene_id]
-    text_box.config(state ='normal')
-    text_box.delete('1.0', tk.END)
-    text = scene['text']
-    if '{name}' in text:
-        text = text.replace('{name}', player_name)
-    text_box.insert(tk.END, text)
-    text_box.config(state='disabled')
-    for widget in buttons_frame.winfo_children(): # очистка кнопок
-        widget.destroy()
+    def show_scene(self, scene_id, mode="default"):
+        self.current_scene = scene_id
+        scene = self.story[scene_id]
+        self.text_box.config(state="normal")
+        self.text_box.delete("1.0", tk.END)
+        text = scene["text"]
+        self.text_box.insert(tk.END, text)
+        self.text_box.config(state="disabled")
 
-    for choice in scene.get("choices", []):
-        button = tk.Button(
-            buttons_frame,
-            text=choice['text'],
-            wraplength=400,
-            width=10,
-            command=lambda n=choice["next"]: on_choice(n)
+        for widget in self.buttons_frame.winfo_children():
+            widget.destroy()
+        choices = self.get_choices(scene, mode)
+        for choice in choices:
+            button = tk.Button(
+                self.buttons_frame,
+                text=choice["text"],
+                width=25,
+                command=lambda c=choice: self.manage_choice(c)
+            )
+            button.pack(fill="x", pady=5)
+
+        if scene.get("type") == "game_over":
+            self.restart_game_over()
+
+    def get_choices(self, scene, mode="default"):
+        choices = scene.get("choices", [])
+
+        if isinstance(choices, dict) and "variants" in choices:
+            return choices["variants"].get(mode, [])
+
+        if isinstance(choices, list):
+            return choices
+
+        return []
+
+    def manage_choice(self, choice):
+        if "next" in choice:
+            self.on_choice(choice["next"])
+        elif "action" in choice:
+            self.manage_action(choice["action"])
+
+    def on_choice(self, next_scene):
+        if next_scene == "introduction" and not self.player_name:
+            self.ask_name()
+
+        if next_scene == "refuse":
+            self.state["refused_journalist"] = True
+
+        if next_scene == "close_seat_v1":
+            self.state["close_seat_v1"] = True
+
+        if next_scene == "wait_stay_cross":
+            self.state["wait_stay_cross"] = True
+
+        if next_scene == "fire_alarm_cross2":
+            self.state["fire_alarm_cross2"] = True
+
+        self.mode = "default"
+        if next_scene == "corridor_cross":
+            if self.state["refused_journalist"] and self.state["close_seat_v1"]:
+                self.mode = "add_var1"
+            elif self.state["fire_alarm_cross2"]:
+                self.mode = "add_var2"
+
+        if next_scene == "new_floor_cross":
+            if self.state["wait_stay_cross"]:
+                self.mode = "add_var1"
+
+        self.show_scene(next_scene, mode=self.mode)
+
+    def manage_action(self, action):
+        if action == "restart":
+            self.restart_game() # TODO добавить другие действия и написать функции для них
+
+    def restart_game(self):
+        self.player_name = ""
+        self.state = {k: False for k in self.state}
+        self.show_scene("start")
+
+    def restart_game_over(self):
+        btn_restart = tk.Button(
+            self.buttons_frame,
+            text="Начать заново",
+            width=15,
+            command=lambda: self.restart_game()
         )
-        button.pack(fill='x', pady=5)
-def on_choice(next_scene):
-    if next_scene == "introduction" and not player_name:
-        ask_name()
-    show_scene(next_scene)
+        btn_restart.pack(fill="x", pady=5)
 
-def ask_name():
-    global player_name
-    player_name = simpledialog.askstring(
-        "Имя",
-        "Как вас зовут?"
-    )
-    if not player_name:
-        player_name = "Player 1"
+    def ask_name(self):
+        self.player_name = simpledialog.askstring(
+            "Имя",
+            "Как вас зовут?"
+        )
+        if not self.player_name:
+            self.player_name = "Player 1" # TODO добавить айди из SQLite
 
-# Сохранения
-
-
-# class SaveManager:
-#     def __init__(self):
-#         os.makedirs("saves", exist_ok=True)
-#
-#         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-#         self.path = f"saves/game_{timestamp}.json"
-#
-#         self.data = {
-#             "player_name": "__UNKNOWN__",
-#             "variables": {},
-#             "history": [],
-#             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-#         }
-#
-#         self._write()
-#
-#     def _write(self):
-#         with open(self.path, "w", encoding="utf-8") as f:
-#             json.dump(self.data, f, ensure_ascii=False, indent=2)
-#
-#     def update_player_name(self, name):
-#         self.data["player_name"] = name
-#         self._write()
-#
-#     def save_game(self, game):
-#         self.data["variables"] = game.variables
-#         self.data["history"] = game.history
-#         self._write()
-
-# os.makedirs("saves", exist_ok=True)
-# timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-# path = f"saves/game_{timestamp}.json"
-
-# Tkinter
 root = tk.Tk()
-root.title("Text Horror Quest: Пропавшая Ёлка ИТМО")
-# root.geometry("1200x800")
-text_box = tk.Text(root, wrap="word", font=("Montserrat", 14))
-text_box.pack(expand=True, fill="both", padx=10, pady=10)
-text_box.config(state="disabled")
-buttons_frame = tk.Frame(root)
-buttons_frame.pack(fill="x", padx=10, pady=10)
+root.title("Text Horror Quest")
 
-# старт игры
-show_scene("start")
+game = Quest(root)
+game.show_scene("start")
 
 root.mainloop()
-
 
 
 

@@ -10,18 +10,17 @@ current_scene = "start"
 player_name = ""
 state = {
     "refused_journalist": False,
-    "close_seat": False,
-    "that_news_true": False
+    "close_seat_v1": False,
+    "fire_alarm_cross2": False,
+    "wait_stay_cross": False,
 }
 
 def get_choices(scene, mode="default"):
     choices = scene.get("choices", [])
 
-    # если choices — словарь с вариантами
     if isinstance(choices, dict) and "variants" in choices:
         return choices["variants"].get(mode, [])
 
-    # если choices — обычный список
     elif isinstance(choices, list):
         return choices
 
@@ -34,8 +33,6 @@ def show_scene(scene_id, mode="default"):
     text_box.config(state ='normal')
     text_box.delete('1.0', tk.END)
     text = scene['text']
-    if '{name}' in text:
-        text = text.replace('{name}', player_name)
     text_box.insert(tk.END, text)
     text_box.config(state='disabled')
 
@@ -53,7 +50,7 @@ def show_scene(scene_id, mode="default"):
         )
         button.pack(fill='x', pady=5)
 
-    if scene.get("type")== "ending":
+    if scene.get("type") == "game_over":
         restart_button()
 
 
@@ -62,19 +59,26 @@ def on_choice(next_scene):
 
     if next_scene == "introduction" and not player_name:
         ask_name()
-
-    if next_scene == "refuse":
+    elif next_scene == "refuse":
         state["refused_journalist"] = True
-
-    if next_scene == "close_seat_v1":
-        state["close_seat"] = True
+    elif next_scene == "close_seat_v1":
+        state["close_seat_v1"] = True
+    elif next_scene == "fire_alarm_cross2":
+        state["fire_alarm_cross2"] = True
+    elif next_scene == "wait_stay_cross":
+        state["wait_stay_cross"] = True
 
     mode = "default"
     if next_scene == "corridor_cross":
-        if state["refused_journalist"] and state["close_seat"]:
+        if state["refused_journalist"] and state["close_seat_v1"]:
             mode = "add_var1"
-        elif state["that_news_true"]:
+        elif state["fire_alarm_cross2"]:
             mode = "add_var2"
+
+    if next_scene == "new_floor_cross":
+        if state["wait_stay_cross"]:
+            mode = "add_var1"
+
     show_scene(next_scene, mode=mode)
 
 
@@ -95,7 +99,6 @@ def restart_button():
         command=lambda: show_scene("start")
     )
     btn_restart.pack(fill="x", pady=5)
-
 
 # Tkinter
 root = tk.Tk()

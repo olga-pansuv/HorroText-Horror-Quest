@@ -107,4 +107,5 @@ def show_branch_end(self):
         if messagebox.askokcancel("Новая ветка", "Начать ветку: Отказаться от разговора?"):
             # Начинаем с отказа от разговора
             self.game.current_scene = "refuse"
+
             self.update_display()

@@ -173,7 +173,7 @@ class Quest:
 if __name__ == "__main__":
     root = ctk.CTk()
     root.geometry("1200x800")
-    root.title("Text Horror Quest: Пропавшая Ёлка ИТМО")
+    root.title("Text Horror Quest: Тайна вузовской ёлки")
     game = Quest(root)
     game.show_scene("start")
     root.mainloop()

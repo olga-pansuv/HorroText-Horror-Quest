@@ -40,18 +40,3 @@ _Дополнительно (только в файле `check_db.py`, для п
 - **pandas** — библиотека для визуализации данных
 - **duckdb** — модуль для работы с базами данных, нужен для выполнения запросов
 
-## Как запустить квест ##
-
-### Через терминал ###
-
-1. **Скопируйте проект:**
-
-`git clone https://github.com/az088497-glitch/Quest_The-Missing-ITMO-Christmas-Tree.git`
-
-`cd Quest_The-Missing-ITMO-Christmas-Tree`
-
-`pip install customtkinter==5.2.2`
-
-`pip install pandas duckdb`
-
-`python Project/final_code/quest_final.py`
